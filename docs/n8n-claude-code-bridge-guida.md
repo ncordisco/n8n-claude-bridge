@@ -330,10 +330,10 @@ avviare il processo).
 conversazione continua**. Claude "ricorda" i prompt precedenti nella stessa sessione — non
 è un comportamento stateless come una chiamata API pura.
 
-**Nota importante**: questa ottimizzazione riguarda *solo* `/run`. L'endpoint
-`/v1/chat/completions` (usato dalla Modalità B, AI Agent nativo) resta stateless — ogni
-chiamata paga il costo pieno di avvio (~7s), ma non ha bisogno di reset perché non
-condivide mai contesto tra chiamate diverse.
+**Aggiornamento**: la sessione persistente ora copre *entrambi* gli endpoint, `/run` E
+`/v1/chat/completions` — quindi anche la Modalità B (AI Agent nativo) beneficia della
+stessa velocità, ma eredita anche la stessa necessità di reset esplicito quando serve
+isolamento. Le tre modalità sono ora uniformi sotto questo aspetto.
 
 ### Quando il reset è NECESSARIO
 
@@ -388,13 +388,13 @@ Vedi `workflows/01-direct-http-call.json` per un esempio completo già collegato
 
 **Modalità B — AI Agent nativo**
 
-**Non serve alcun reset**: `/v1/chat/completions` è stateless per progettazione (ogni
-chiamata è indipendente, senza sessione condivisa). È il "costo" della maggiore lentezza
-di questa modalità — nessuna ottimizzazione di sessione persistente applicata qui.
+Anche questa modalità ora usa la sessione persistente (stessa velocità di A/C), quindi
+serve lo stesso accorgimento: un nodo **HTTP Request** verso `/reset-session` prima
+dell'AI Agent nel canvas. Non serve nessuna credenziale per questa chiamata (è solo un
+POST verso il bridge stesso).
 
-Se in futuro si estendesse la sessione persistente anche a questo endpoint (per
-uniformare la velocità), tornerebbe necessario un meccanismo di reset equivalente — non
-ancora implementato.
+Vedi `workflows/02-ai-agent-nativo.json`, che include già il nodo "Reset Sessione"
+prima di "Costruisci Prompt" → "AI Agent".
 
 **Modalità C — Nodo custom "Claude Code Bridge"**
 
@@ -411,11 +411,11 @@ Vedi `workflows/03-claude-code-bridge-custom-node.json` per un esempio pronto.
 
 ### Riepilogo comparativo
 
-| Modalità            | Velocità                                  | Reset necessario?       | Come                                          |
-|---------------------|-------------------------------------------|-------------------------|-----------------------------------------------|
-| A — HTTP diretto    | Veloce (sessione persistente)             | Sì, se serve isolamento | Nodo HTTP Request → `/reset-session`          |
-| B — AI Agent nativo | Lenta (stateless per progettazione)       | Mai                     | —                                             |
-| C — Nodo custom     | Veloce (stessa sessione persistente di A) | Sì, se serve isolamento | Operation = "Reset Session" nello stesso nodo |
+| Modalità            | Velocità                             | Reset necessario?       | Come                                                      |
+|---------------------|--------------------------------------|-------------------------|-----------------------------------------------------------|
+| A — HTTP diretto    | Veloce (sessione persistente)        | Sì, se serve isolamento | Nodo HTTP Request → `/reset-session`                      |
+| B — AI Agent nativo | Veloce (stessa sessione persistente) | Sì, se serve isolamento | Nodo HTTP Request → `/reset-session`, prima dell'AI Agent |
+| C — Nodo custom     | Veloce (stessa sessione persistente) | Sì, se serve isolamento | Operation = "Reset Session" nello stesso nodo             |
 
 ---
 

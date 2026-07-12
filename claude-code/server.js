@@ -367,7 +367,16 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 400, {error: 'Campo "messages" mancante o vuoto'});
             }
 
-            const claudeOut = await runClaude(prompt, payload.model);
+            const useDefault = !payload.model || payload.model === DEFAULT_MODEL_LABEL;
+            let claudeOut;
+            try {
+                claudeOut = useDefault
+                    ? await runClaudePersistent(prompt)
+                    : await runClaude(prompt, payload.model);
+            } catch (err) {
+                console.error('[persistente] fallback a runClaude classico (chat/completions):', err.message);
+                claudeOut = await runClaude(prompt, payload.model);
+            }
 
             if (claudeOut.is_error) {
                 return sendJson(res, 500, {

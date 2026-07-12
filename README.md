@@ -18,11 +18,11 @@ Guida completa: `docs/n8n-claude-code-bridge-guida.md`
 
 ## Tre modi di usare il bridge da n8n
 
-| #                                    | Workflow di esempio                                | Velocità                      | Reset sessione                |
-|--------------------------------------|----------------------------------------------------|-------------------------------|-------------------------------|
-| 1 — HTTP Request diretto             | `workflows/01-direct-http-call.json`               | Veloce (sessione persistente) | Sì, incluso nel flow          |
-| 2 — AI Agent nativo                  | `workflows/02-ai-agent-nativo.json`                | Lenta (stateless)             | Non serve                     |
-| 3 — Nodo custom "Claude Code Bridge" | `workflows/03-claude-code-bridge-custom-node.json` | Veloce (stessa sessione di 1) | Sì, Operation="Reset Session" |
+| #                                    | Workflow di esempio                                | Velocità                             | Reset sessione                |
+|--------------------------------------|----------------------------------------------------|--------------------------------------|-------------------------------|
+| 1 — HTTP Request diretto             | `workflows/01-direct-http-call.json`               | Veloce (sessione persistente)        | Sì, incluso nel flow          |
+| 2 — AI Agent nativo                  | `workflows/02-ai-agent-nativo.json`                | Veloce (stessa sessione persistente) | Sì, incluso nel flow          |
+| 3 — Nodo custom "Claude Code Bridge" | `workflows/03-claude-code-bridge-custom-node.json` | Veloce (stessa sessione persistente) | Sì, Operation="Reset Session" |
 
 Dopo l'import di ciascun workflow, la credenziale va sempre ricreata a mano (l'ID nel
 JSON è un placeholder che non esiste nella tua istanza) — vedi guida, sezione 6 (Modalità

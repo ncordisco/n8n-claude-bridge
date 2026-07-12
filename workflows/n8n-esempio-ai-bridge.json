@@ -18,7 +18,7 @@
       },
       "id": "2b222222-2222-4222-8222-222222222222",
       "name": "Reset Sessione",
-      "type": "n8n-nodes-claude-code-bridge.claudeCodeBridge",
+      "type": "CUSTOM.claudeCodeBridge",
       "typeVersion": 1,
       "position": [
         460,
@@ -33,17 +33,40 @@
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-prompt",
+              "name": "prompt",
+              "type": "string",
+              "value": "Sei un assistente per un architetto software Java/Spring. Spiega in 3 righe cos'è il pattern Circuit Breaker e quando usarlo in un'architettura a microservizi."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5e555555-5555-4555-8555-555555555555",
+      "name": "Costruisci Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "operation": "run",
-        "prompt": "Sei un assistente per un architetto software Java/Spring. Spiega in 3 righe cos'è il pattern Circuit Breaker e quando usarlo in un'architettura a microservizi.",
+        "prompt": "={{ $json.prompt }}",
         "model": "claude-code-bridge",
         "additionalOptions": {}
       },
       "id": "3c333333-3333-4333-8333-333333333333",
       "name": "Esegui Prompt",
-      "type": "n8n-nodes-claude-code-bridge.claudeCodeBridge",
+      "type": "CUSTOM.claudeCodeBridge",
       "typeVersion": 1,
       "position": [
-        680,
+        900,
         300
       ],
       "credentials": {
@@ -67,6 +90,17 @@
       ]
     },
     "Reset Sessione": {
+      "main": [
+        [
+          {
+            "node": "Costruisci Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Costruisci Prompt": {
       "main": [
         [
           {
