@@ -5,8 +5,6 @@ import {
     INodePropertyOptions,
     INodeType,
     INodeTypeDescription,
-    NodeApiError,
-    NodeConnectionType,
 } from 'n8n-workflow';
 
 export class ClaudeCodeBridge implements INodeType {
@@ -22,8 +20,8 @@ export class ClaudeCodeBridge implements INodeType {
         defaults: {
             name: 'Claude Code Bridge',
         },
-        inputs: [NodeConnectionType.Main],
-        outputs: [NodeConnectionType.Main],
+        inputs: ['main'],
+        outputs: ['main'],
         credentials: [
             {
                 name: 'claudeCodeBridgeApi',
@@ -158,9 +156,9 @@ export class ClaudeCodeBridge implements INodeType {
                     });
                     continue;
                 }
-                throw new NodeApiError(this.getNode(), error as Error, {
-                    message: `Errore chiamando il bridge Claude Code: ${(error as Error).message}`,
-                });
+                throw new Error(
+                    `Errore chiamando il bridge Claude Code: ${(error as Error).message}`,
+                );
             }
         }
 
