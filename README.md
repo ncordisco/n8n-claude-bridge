@@ -1,4 +1,4 @@
-# n8n + Claude Code bridge (setup locale)
+git # n8n + Claude Code bridge (setup locale)
 
 © Nino Cordisco — uso personale, ambito di test/prototipazione locale.
 
