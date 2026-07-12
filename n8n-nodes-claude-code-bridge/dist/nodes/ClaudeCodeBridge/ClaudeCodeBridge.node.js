@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", {value: true});
 exports.ClaudeCodeBridge = void 0;
-
 class ClaudeCodeBridge {
     constructor() {
         this.description = {
@@ -25,6 +24,26 @@ class ClaudeCodeBridge {
             ],
             properties: [
                 {
+                    displayName: 'Operation',
+                    name: 'operation',
+                    type: 'options',
+                    options: [
+                        {
+                            name: 'Run Prompt',
+                            value: 'run',
+                            description: 'Invia un prompt a Claude tramite il bridge',
+                            action: 'Esegue un prompt su Claude',
+                        },
+                        {
+                            name: 'Reset Session',
+                            value: 'reset',
+                            description: 'Azzera il contesto della sessione persistente del bridge (utile a inizio workflow, per isolare l\'esecuzione da quelle precedenti)',
+                            action: 'Resetta la sessione persistente del bridge',
+                        },
+                    ],
+                    default: 'run',
+                },
+                {
                     displayName: 'Prompt',
                     name: 'prompt',
                     type: 'string',
@@ -34,6 +53,11 @@ class ClaudeCodeBridge {
                     default: '',
                     required: true,
                     description: 'Il testo da inviare a Claude',
+                    displayOptions: {
+                        show: {
+                            operation: ['run'],
+                        },
+                    },
                 },
                 {
                     displayName: 'Model',
@@ -44,6 +68,11 @@ class ClaudeCodeBridge {
                     },
                     default: 'claude-code-bridge',
                     description: 'Modello da usare. "claude-code-bridge" usa il default configurato nel bridge (il modello più leggero/veloce).',
+                    displayOptions: {
+                        show: {
+                            operation: ['run'],
+                        },
+                    },
                 },
                 {
                     displayName: 'Opzioni aggiuntive',
@@ -51,6 +80,11 @@ class ClaudeCodeBridge {
                     type: 'collection',
                     placeholder: 'Aggiungi opzione',
                     default: {},
+                    displayOptions: {
+                        show: {
+                            operation: ['run'],
+                        },
+                    },
                     options: [
                         {
                             displayName: 'Timeout (ms)',
@@ -96,13 +130,41 @@ class ClaudeCodeBridge {
             },
         };
     }
-
     async execute() {
         const items = this.getInputData();
         const returnData = [];
         const credentials = await this.getCredentials('claudeCodeBridgeApi');
         const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
         for (let i = 0; i < items.length; i++) {
+            const operation = this.getNodeParameter('operation', i, 'run');
+            if (operation === 'reset') {
+                try {
+                    const response = await this.helpers.httpRequest({
+                        method: 'POST',
+                        url: `${baseUrl}/reset-session`,
+                        body: {},
+                        json: true,
+                    });
+                    returnData.push({
+                        json: {
+                            successo: true,
+                            stato: response.status,
+                            nota: response.note,
+                        },
+                        pairedItem: {item: i},
+                    });
+                } catch (error) {
+                    if (this.continueOnFail()) {
+                        returnData.push({
+                            json: {successo: false, errore: error.message},
+                            pairedItem: {item: i},
+                        });
+                        continue;
+                    }
+                    throw new Error(`Errore nel reset della sessione: ${error.message}`);
+                }
+                continue;
+            }
             const prompt = this.getNodeParameter('prompt', i);
             const model = this.getNodeParameter('model', i);
             const additionalOptions = this.getNodeParameter('additionalOptions', i, {});
@@ -141,5 +203,4 @@ class ClaudeCodeBridge {
         return [returnData];
     }
 }
-
 exports.ClaudeCodeBridge = ClaudeCodeBridge;

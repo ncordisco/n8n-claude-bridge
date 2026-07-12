@@ -1,5 +1,4 @@
 import {IExecuteFunctions, ILoadOptionsFunctions, INodeExecutionData, INodePropertyOptions, INodeType, INodeTypeDescription} from 'n8n-workflow';
-
 export declare class ClaudeCodeBridge implements INodeType {
     description: INodeTypeDescription;
     methods: {
@@ -7,6 +6,5 @@ export declare class ClaudeCodeBridge implements INodeType {
             getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
         };
     };
-
     execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]>;
 }

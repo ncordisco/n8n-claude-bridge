@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", {value: true});
 exports.ClaudeCodeBridgeApi = void 0;
-
 class ClaudeCodeBridgeApi {
     constructor() {
         this.name = 'claudeCodeBridgeApi';
@@ -20,5 +19,4 @@ class ClaudeCodeBridgeApi {
         ];
     }
 }
-
 exports.ClaudeCodeBridgeApi = ClaudeCodeBridgeApi;
