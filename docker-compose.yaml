@@ -1,0 +1,56 @@
+version: "3.9"
+
+networks:
+  n8n-net:
+
+volumes:
+  n8n_data:
+  claude-auth:
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=development
+      - GENERIC_TIMEZONE=Europe/Rome
+      - TZ=Europe/Rome
+      - N8N_SECURE_COOKIE=false
+    ports:
+      - "127.0.0.1:5678:5678"   # solo localhost, non raggiungibile dalla rete
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-nodes-claude-code-bridge:/home/node/.n8n/custom/node_modules/n8n-nodes-claude-code-bridge
+      # niente più socket Docker: n8n parla con claude-code solo via HTTP interno
+    networks:
+      - n8n-net
+
+  python:
+    image: python:3.11
+    container_name: python-runtime
+    command: tail -f /dev/null
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - n8n-net
+
+  claude-code:
+    build: ./claude-code
+    container_name: claude-code-agent
+    environment:
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - PORT=4000
+    volumes:
+      - claude-auth:/root/.claude
+      - ./claude-code/claude.json:/root/.claude.json
+      - ./claude-code/server.js:/workspace/server.js   # bind mount: modifiche live, no rebuild
+      - ./scripts:/workspace/scripts
+    networks:
+      - n8n-net
+    restart: unless-stopped
+    # nessuna porta pubblicata verso l'host: raggiungibile solo dalla rete n8n-net,
+    # da n8n via http://claude-code-agent:4000

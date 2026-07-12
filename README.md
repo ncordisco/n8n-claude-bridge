@@ -1,4 +1,4 @@
-git # n8n + Claude Code bridge (setup locale)
+# n8n + Claude Code bridge (setup locale)
 
 © Nino Cordisco — uso personale, ambito di test/prototipazione locale.
 
@@ -7,7 +7,7 @@ motore AI per agenti, senza attivare una API key a consumo.
 
 Guida completa: `docs/n8n-claude-code-bridge-guida.md`
 
-## Avvio rapido
+## Avvio rapido (bridge)
 
     cp .env.example .env
     docker compose up -d --build
@@ -16,16 +16,26 @@ Guida completa: `docs/n8n-claude-code-bridge-guida.md`
     docker compose up -d --force-recreate claude-code
     docker compose exec n8n wget -qO- http://claude-code-agent:4000/health
 
-## Workflow di esempio
+## Tre modi di usare il bridge da n8n
 
-- `workflows/n8n-esempio-agent-claude-http.json` — chiamata diretta via HTTP Request
-- `workflows/n8n-esempio-ai-agent-nativo.json` — nodo AI Agent nativo di n8n
+1. **HTTP Request diretto** — `workflows/n8n-esempio-agent-claude-http.json`
+2. **AI Agent nativo** (OpenAI Chat Model puntato al bridge) —
+   `workflows/n8n-esempio-ai-agent-nativo.json`. Dopo l'import, la credenziale va
+   ricreata a mano (vedi guida, sezione 6).
+3. **Nodo custom dedicato "Claude Code Bridge"** — vedi
+   `n8n-nodes-claude-code-bridge/README.md` per build e setup. UI più pulita, nessuna
+   credenziale fittizia da inventare.
 
-**IMPORTANTE**: dopo l'import di un workflow con nodo "OpenAI Chat Model", la credenziale
-va sempre ricreata manualmente (API Key: qualsiasi valore, Base URL:
-`http://claude-code-agent:4000/v1`) — vedi guida, sezione 6.
+## Sviluppo del bridge (server.js)
 
-## Sviluppo
+Bind-mounted e ricaricato automaticamente (`node --watch`) ad ogni modifica: nessun
+rebuild necessario.
 
-`server.js` è bind-mounted e ricaricato automaticamente (`node --watch`) ad ogni modifica:
-nessun rebuild necessario per cambiare il codice del bridge.
+## Struttura
+
+    n8n-compose/
+    ├── docker-compose.yaml
+    ├── claude-code/                       # il bridge HTTP verso claude CLI
+    ├── workflows/                         # esempi di workflow n8n
+    ├── n8n-nodes-claude-code-bridge/       # nodo custom n8n (opzionale)
+    └── docs/                              # guida completa

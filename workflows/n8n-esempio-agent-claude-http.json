@@ -1,0 +1,111 @@
+{
+  "name": "Esempio - Agent Claude (HTTP bridge)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1a111111-1111-4111-8111-111111111111",
+      "name": "Trigger Manuale",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-prompt",
+              "name": "prompt",
+              "type": "string",
+              "value": "Sei un assistente per un architetto software Java/Spring. Spiega in 3 righe cos'è il pattern Circuit Breaker e quando usarlo in un'architettura a microservizi."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2b222222-2222-4222-8222-222222222222",
+      "name": "Costruisci Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://claude-code-agent:4000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ prompt: $json.prompt }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "3c333333-3333-4333-8333-333333333333",
+      "name": "Chiama Claude (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.item.json;\n\nif (output.error) {\n  return {\n    json: {\n      successo: false,\n      errore: output.error,\n      dettagli: output.details || output.stderr || null\n    }\n  };\n}\n\nreturn {\n  json: {\n    successo: !output.is_error,\n    risposta: output.result,\n    costo_figurativo_usd: output.total_cost_usd,\n    modello: Object.keys(output.modelUsage || {})[0] || null,\n    session_id: output.session_id\n  }\n};"
+      },
+      "id": "4d444444-4444-4444-8444-444444444444",
+      "name": "Estrai Risposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Manuale": {
+      "main": [
+        [
+          {
+            "node": "Costruisci Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Costruisci Prompt": {
+      "main": [
+        [
+          {
+            "node": "Chiama Claude (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chiama Claude (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Estrai Risposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "esempio-locale-claude-code-bridge-http"
+  }
+}
