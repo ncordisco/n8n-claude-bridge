@@ -1,5 +1,5 @@
 {
-  "name": "Esempio - Agent Claude (HTTP bridge)",
+  "name": "01 - Direct HTTP Call",
   "nodes": [
     {
       "parameters": {},
@@ -8,7 +8,25 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        260,
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://claude-code-agent:4000/reset-session",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {}
+      },
+      "id": "0f000000-0000-4000-8000-000000000001",
+      "name": "Reset Sessione",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
         300
       ]
     },
@@ -31,7 +49,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        480,
+        680,
         300
       ]
     },
@@ -42,35 +60,44 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ prompt: $json.prompt }) }}",
-        "options": {
-          "timeout": 180000
-        }
+        "options": {}
       },
       "id": "3c333333-3333-4333-8333-333333333333",
       "name": "Chiama Claude (HTTP)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        700,
+        900,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.item.json;\n\nif (output.error) {\n  return {\n    json: {\n      successo: false,\n      errore: output.error,\n      dettagli: output.details || output.stderr || null\n    }\n  };\n}\n\nreturn {\n  json: {\n    successo: !output.is_error,\n    risposta: output.result,\n    costo_figurativo_usd: output.total_cost_usd,\n    modello: Object.keys(output.modelUsage || {})[0] || null,\n    session_id: output.session_id\n  }\n};"
+        "jsCode": "const output = $input.item.json;\n\nif (output.error) {\n  return { json: { successo: false, errore: output.error } };\n}\n\nreturn {\n  json: {\n    successo: !output.is_error,\n    risposta: output.result,\n    costoFigurativo: output.total_cost_usd,\n    modello: Object.keys(output.modelUsage || {})[0] || null,\n    sessionId: output.session_id\n  }\n};"
       },
       "id": "4d444444-4444-4444-8444-444444444444",
       "name": "Estrai Risposta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        920,
+        1120,
         300
       ]
     }
   ],
   "connections": {
     "Trigger Manuale": {
+      "main": [
+        [
+          {
+            "node": "Reset Sessione",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset Sessione": {
       "main": [
         [
           {
@@ -106,6 +133,6 @@
   },
   "pinData": {},
   "meta": {
-    "instanceId": "esempio-locale-claude-code-bridge-http"
+    "instanceId": "claude-code-bridge-01-http-diretto"
   }
 }

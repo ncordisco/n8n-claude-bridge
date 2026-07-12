@@ -118,6 +118,7 @@ n8n-compose/
 | `/v1/models`           | GET    | Elenco modelli, formato OpenAI (usato da n8n per popolare il dropdown)                                   |
 | `/models`              | GET    | Stesso elenco, formato semplice                                                                          |
 | `/status`              | GET    | Utilizzo residuo del piano (5h/7gg) — **endpoint non ufficiale Anthropic**, può cambiare senza preavviso |
+| `/reset-session`       | POST   | Azzera il contesto della sessione persistente (vedi sezione 8.5)                                         |
 
 **Selezione modello**: passando `"model": "claude-opus-4-8"` (o altro ID) nel body di
 `/run` o `/v1/chat/completions`, il bridge usa quel modello specifico. Se il campo è
@@ -312,6 +313,109 @@ OpenAI-compatibile.
 | `/bin/sh: docker: not found`                                           | Approccio precedente (`docker exec`) richiedeva il client Docker in n8n                                        | Superato dall'architettura HTTP: non serve più il client Docker in n8n                         |
 | `Node does not have any credentials set`                               | L'ID credenziale nel JSON importato non esiste nella tua istanza                                               | Vedi sezione 6 — creare manualmente la credenziale "fake" con Base URL del bridge              |
 | `Cannot read properties of undefined (reading 'content')`              | Il nodo AI Agent richiede risposta in streaming (SSE), il bridge inizialmente rispondeva solo con JSON singolo | Vedi sezione 7 — implementato supporto `"stream": true` con risposta SSE                       |
+
+---
+
+## 8.5. Sessione persistente: latenza, contesto condiviso e quando resettare
+
+### Perché esiste una sessione persistente
+
+Le chiamate a `/run` (usate dalla Modalità A e dal nodo custom, Modalità C) non avviano
+più un processo `claude` da zero ad ogni richiesta. Un singolo processo resta vivo e
+riceve i prompt uno dopo l'altro via stdin — questo abbatte la latenza da ~7 secondi a
+~3-3,5 secondi a regime (la prima chiamata dopo l'avvio resta più lenta, perché deve
+avviare il processo).
+
+**Effetto collaterale**: il processo persistente tratta le chiamate come **un'unica
+conversazione continua**. Claude "ricorda" i prompt precedenti nella stessa sessione — non
+è un comportamento stateless come una chiamata API pura.
+
+**Nota importante**: questa ottimizzazione riguarda *solo* `/run`. L'endpoint
+`/v1/chat/completions` (usato dalla Modalità B, AI Agent nativo) resta stateless — ogni
+chiamata paga il costo pieno di avvio (~7s), ma non ha bisogno di reset perché non
+condivide mai contesto tra chiamate diverse.
+
+### Quando il reset è NECESSARIO
+
+- **Workflow diversi o non correlati** che potrebbero eseguire nella stessa finestra di
+  tempo (es. due automazioni distinte che girano a pochi minuti di distanza)
+- **Dati sensibili o specifici di un cliente/contesto** in un prompt, che non devono
+  "contaminare" le risposte a richieste successive non correlate
+- **Test e debug**: vuoi che la stessa identica richiesta dia sempre la stessa risposta,
+  senza influenze da chiamate precedenti nella sessione
+- **Pattern multi-agente** (orchestratore + agenti specialisti): se agenti con ruoli/system
+  prompt diversi passano dallo stesso bridge, senza reset l'agente B "vede" quello che ha
+  detto l'agente A nella stessa sessione — quasi mai quello che vuoi in un'architettura a
+  agenti indipendenti
+
+### Quando il reset NON è necessario
+
+- **Chiamate consecutive all'interno della stessa esecuzione di workflow**, dove in
+  realtà il contesto condiviso è desiderabile (es. una vera conversazione multi-turno con
+  lo stesso "agente")
+- **Uso saltuario/personale**, dove la contaminazione tra una chiamata e l'altra non è un
+  problema pratico
+
+### Reset automatico per inattività (già attivo di default)
+
+Se il bridge resta inutilizzato per **10 minuti** (default, configurabile), il processo
+persistente si auto-termina — la chiamata successiva parte con contesto vuoto. Per
+cambiare la soglia, nel `docker-compose.yaml`, servizio `claude-code`:
+
+```yaml
+environment:
+  - IDLE_RESET_MS=300000   # esempio: 5 minuti invece di 10
+```
+
+Questo protegge dalla contaminazione tra sessioni di lavoro *separate nel tempo* (oggi vs
+domani), ma **non basta** da solo per isolare esecuzioni ravvicinate di workflow diversi
+— per quello serve il reset esplicito descritto sotto.
+
+### Come resettare nelle tre modalità
+
+**Modalità A — HTTP Request diretto**
+
+Aggiungi un nodo HTTP Request prima della chiamata a `/run`:
+
+```
+Metodo: POST
+URL: http://claude-code-agent:4000/reset-session
+Body (JSON): {}
+```
+
+Vedi `workflows/01-direct-http-call.json` per un esempio completo già collegato
+(Trigger → Reset Sessione → Costruisci Prompt → Chiama Claude → Estrai Risposta).
+
+**Modalità B — AI Agent nativo**
+
+**Non serve alcun reset**: `/v1/chat/completions` è stateless per progettazione (ogni
+chiamata è indipendente, senza sessione condivisa). È il "costo" della maggiore lentezza
+di questa modalità — nessuna ottimizzazione di sessione persistente applicata qui.
+
+Se in futuro si estendesse la sessione persistente anche a questo endpoint (per
+uniformare la velocità), tornerebbe necessario un meccanismo di reset equivalente — non
+ancora implementato.
+
+**Modalità C — Nodo custom "Claude Code Bridge"**
+
+Il nodo ha un campo **Operation** con due valori: "Run Prompt" e "Reset Session".
+Aggiungi un nodo "Claude Code Bridge" con Operation = "Reset Session" prima di quello con
+Operation = "Run Prompt", usando la stessa credenziale già configurata (nessuna
+riconfigurazione necessaria):
+
+```
+Trigger → [Claude Code Bridge: Reset Session] → [Claude Code Bridge: Run Prompt] → ...
+```
+
+Vedi `workflows/03-claude-code-bridge-custom-node.json` per un esempio pronto.
+
+### Riepilogo comparativo
+
+| Modalità            | Velocità                                  | Reset necessario?       | Come                                          |
+|---------------------|-------------------------------------------|-------------------------|-----------------------------------------------|
+| A — HTTP diretto    | Veloce (sessione persistente)             | Sì, se serve isolamento | Nodo HTTP Request → `/reset-session`          |
+| B — AI Agent nativo | Lenta (stateless per progettazione)       | Mai                     | —                                             |
+| C — Nodo custom     | Veloce (stessa sessione persistente di A) | Sì, se serve isolamento | Operation = "Reset Session" nello stesso nodo |
 
 ---
 

@@ -1,0 +1,85 @@
+{
+  "name": "03 - Claude Code Bridge (nodo custom)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1a111111-1111-4111-8111-111111111111",
+      "name": "Trigger Manuale",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reset"
+      },
+      "id": "2b222222-2222-4222-8222-222222222222",
+      "name": "Reset Sessione",
+      "type": "n8n-nodes-claude-code-bridge.claudeCodeBridge",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "claudeCodeBridgeApi": {
+          "id": "PLACEHOLDER",
+          "name": "Claude Code Bridge account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "run",
+        "prompt": "Sei un assistente per un architetto software Java/Spring. Spiega in 3 righe cos'è il pattern Circuit Breaker e quando usarlo in un'architettura a microservizi.",
+        "model": "claude-code-bridge",
+        "additionalOptions": {}
+      },
+      "id": "3c333333-3333-4333-8333-333333333333",
+      "name": "Esegui Prompt",
+      "type": "n8n-nodes-claude-code-bridge.claudeCodeBridge",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "claudeCodeBridgeApi": {
+          "id": "PLACEHOLDER",
+          "name": "Claude Code Bridge account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Trigger Manuale": {
+      "main": [
+        [
+          {
+            "node": "Reset Sessione",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset Sessione": {
+      "main": [
+        [
+          {
+            "node": "Esegui Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "claude-code-bridge-03-nodo-custom"
+  }
+}

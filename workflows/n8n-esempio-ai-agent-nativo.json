@@ -1,5 +1,5 @@
 {
-  "name": "Esempio - AI Agent nativo (bridge Claude via OpenAI-compatible)",
+  "name": "02 - AI Agent Nativo",
   "nodes": [
     {
       "parameters": {},
@@ -112,6 +112,6 @@
   },
   "pinData": {},
   "meta": {
-    "instanceId": "esempio-locale-claude-code-bridge-ai-agent"
+    "instanceId": "claude-code-bridge-02-ai-agent-nativo"
   }
 }

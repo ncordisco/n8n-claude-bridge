@@ -1,6 +1,7 @@
 const http = require('http');
 const https = require('https');
-const {execFile} = require('child_process');
+const {execFile, spawn} = require('child_process');
+const readline = require('readline');
 
 const PORT = process.env.PORT || 4000;
 const DEFAULT_MODEL_LABEL = 'claude-code-bridge';
@@ -47,7 +48,19 @@ function readJsonBody(req) {
 
 function runClaude(prompt, model) {
     return new Promise((resolve, reject) => {
-        const args = ['-p', prompt, '--output-format', 'json'];
+        // --safe-mode disabilita CLAUDE.md/plugin/skill/hook/MCP discovery, come
+        // --bare, ma (a differenza di --bare) NON richiede ANTHROPIC_API_KEY e
+        // dovrebbe restare compatibile con CLAUDE_CODE_OAUTH_TOKEN.
+        // --max-turns 1 impedisce cicli agentici multi-step: una sola risposta.
+        // --allowedTools '' toglie ogni tool (Read/Bash/Edit/ecc.): comportamento
+        // da puro chatbot testuale, niente tentativi di "verificare" o esplorare file.
+        const args = [
+            '-p', prompt,
+            '--safe-mode',
+            '--max-turns', '1',
+            '--allowedTools', '',
+            '--output-format', 'json',
+        ];
         // "claude-code-bridge" (o nessun modello specificato) mappa sempre sul
         // modello più leggero/veloce: usiamo l'ID completo per evitare il bug
         // di risoluzione dell'alias "haiku".
@@ -69,6 +82,163 @@ function runClaude(prompt, model) {
                 }
             }
         );
+    });
+}
+
+// ============================================================
+// Sessione persistente (SPERIMENTALE)
+// ============================================================
+// Protocollo "--input-format stream-json" NON documentato ufficialmente da
+// Anthropic (solo i flag CLI lo sono, non il formato esatto dei messaggi):
+// ricostruito da fonti community/SDK non ufficiali. Ogni riga stdout viene
+// loggata in console per poter fare debug se il parsing non dovesse combaciare
+// con quanto assunto qui.
+//
+// Usata SOLO per il modello di default (quello leggero): un processo claude
+// resta vivo e riceve i prompt via stdin, evitando il costo di avvio/auth ad
+// ogni richiesta. Per modelli specifici diversi, si ricade sul vecchio
+// comportamento spawn-per-richiesta (runClaude), più lento ma collaudato.
+
+let persistentProc = null;
+let persistentReady = false;
+let requestQueue = [];
+let currentRequest = null;
+const PERSISTENT_TIMEOUT_MS = 120000;
+
+// Reset automatico per inattività: se non arrivano richieste per questo tempo,
+// il processo persistente viene terminato (si riavvierà, con contesto vuoto,
+// alla richiesta successiva). Configurabile via env var, default 10 minuti.
+const IDLE_RESET_MS = parseInt(process.env.IDLE_RESET_MS || '600000', 10);
+let idleResetTimer = null;
+
+function scheduleIdleReset() {
+    if (idleResetTimer) clearTimeout(idleResetTimer);
+    idleResetTimer = setTimeout(() => {
+        if (persistentProc) {
+            console.log(`[persistente] inattivo da ${IDLE_RESET_MS}ms, reset automatico del contesto`);
+            persistentProc.kill();
+        }
+    }, IDLE_RESET_MS);
+}
+
+function startPersistentSession() {
+    const args = [
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--include-partial-messages',
+        '--replay-user-messages',
+        '--allowedTools', '',
+        '--max-turns', '1',
+        '--model', DEFAULT_MODEL_ID,
+    ];
+
+    console.log('Avvio processo claude persistente:', args.join(' '));
+    const proc = spawn('claude', args, {stdio: ['pipe', 'pipe', 'pipe']});
+    persistentProc = proc;
+    persistentReady = true;
+
+    const rl = readline.createInterface({input: proc.stdout});
+
+    rl.on('line', (line) => {
+        if (!line.trim()) return;
+        console.log('[persistente:stdout]', line);
+        let event;
+        try {
+            event = JSON.parse(line);
+        } catch (e) {
+            console.error('Riga non JSON dal processo persistente, ignorata:', line);
+            return;
+        }
+        handlePersistentEvent(event);
+    });
+
+    proc.stderr.on('data', (chunk) => {
+        console.error('[persistente:stderr]', chunk.toString());
+    });
+
+    proc.on('exit', (code) => {
+        console.error(`Processo claude persistente terminato (code ${code}), verrà riavviato alla prossima richiesta`);
+        persistentReady = false;
+        persistentProc = null;
+        if (currentRequest) {
+            clearTimeout(currentRequest.timeoutHandle);
+            currentRequest.reject(new Error('Processo persistente terminato inaspettatamente'));
+            currentRequest = null;
+        }
+        requestQueue.forEach((req) => {
+            clearTimeout(req.timeoutHandle);
+            req.reject(new Error('Processo persistente non disponibile'));
+        });
+        requestQueue = [];
+    });
+
+    proc.on('error', (err) => {
+        console.error('[persistente] errore di avvio:', err.message);
+        persistentReady = false;
+        persistentProc = null;
+    });
+}
+
+function handlePersistentEvent(event) {
+    if (!currentRequest) return; // evento fuori contesto (es. init all'avvio), ignora
+
+    // Testo in streaming a pezzi, se il formato lo prevede
+    if (
+        event.type === 'stream_event' &&
+        event.event &&
+        event.event.delta &&
+        event.event.delta.type === 'text_delta'
+    ) {
+        currentRequest.buffer.text += event.event.delta.text || '';
+        return;
+    }
+
+    // Evento di risultato finale del turno (stesso formato del batch --output-format json)
+    if (event.type === 'result') {
+        clearTimeout(currentRequest.timeoutHandle);
+        const finalText = currentRequest.buffer.text || event.result || '';
+        currentRequest.resolve({
+            is_error: !!event.is_error,
+            result: finalText,
+            total_cost_usd: event.total_cost_usd,
+            session_id: event.session_id,
+            usage: event.usage,
+            modelUsage: event.modelUsage,
+        });
+        currentRequest = null;
+        processQueue();
+        return;
+    }
+}
+
+function processQueue() {
+    if (currentRequest || requestQueue.length === 0) return;
+    currentRequest = requestQueue.shift();
+
+    currentRequest.timeoutHandle = setTimeout(() => {
+        console.error('[persistente] timeout: nessun evento "result" ricevuto, riavvio il processo');
+        if (persistentProc) persistentProc.kill();
+        currentRequest.reject(new Error('Timeout in attesa di risposta dal processo persistente'));
+        currentRequest = null;
+    }, PERSISTENT_TIMEOUT_MS);
+
+    const message = {
+        type: 'user',
+        message: {role: 'user', content: [{type: 'text', text: currentRequest.prompt}]},
+    };
+
+    persistentProc.stdin.write(JSON.stringify(message) + '\n');
+}
+
+function runClaudePersistent(prompt) {
+    return new Promise((resolve, reject) => {
+        if (!persistentReady) {
+            startPersistentSession();
+        }
+        scheduleIdleReset();
+        requestQueue.push({prompt, resolve, reject, buffer: {text: ''}});
+        processQueue();
     });
 }
 
@@ -129,6 +299,18 @@ const server = http.createServer(async (req, res) => {
             return sendJson(res, 200, {status: 'ok'});
         }
 
+        // --- Reset della sessione persistente: azzera il contesto conversazionale
+        // accumulato, forzando un nuovo processo (e quindi una nuova sessione "vuota")
+        // alla prossima richiesta. Utile per evitare che chiamate non correlate
+        // "ricordino" prompt precedenti.
+        if (req.method === 'POST' && req.url === '/reset-session') {
+            if (persistentProc) {
+                persistentProc.kill();
+                return sendJson(res, 200, {status: 'reset', note: 'Sessione persistente terminata, ne verrà avviata una nuova alla prossima richiesta'});
+            }
+            return sendJson(res, 200, {status: 'noop', note: 'Nessuna sessione persistente attiva da resettare'});
+        }
+
         // --- Lista modelli disponibili (statica/curata) ---
         if (req.method === 'GET' && (req.url === '/models' || req.url === '/v1/models')) {
             if (req.url === '/v1/models') {
@@ -159,7 +341,20 @@ const server = http.createServer(async (req, res) => {
             if (!payload.prompt || typeof payload.prompt !== 'string') {
                 return sendJson(res, 400, {error: 'Campo "prompt" mancante o non stringa'});
             }
-            const output = await runClaude(payload.prompt, payload.model);
+
+            const useDefault = !payload.model || payload.model === DEFAULT_MODEL_LABEL;
+            let output;
+            try {
+                output = useDefault
+                    ? await runClaudePersistent(payload.prompt)
+                    : await runClaude(payload.prompt, payload.model);
+            } catch (err) {
+                // Fallback automatico: se la sessione persistente fallisce, riprova
+                // con il vecchio metodo spawn-per-richiesta prima di arrendersi.
+                console.error('[persistente] fallback a runClaude classico:', err.message);
+                output = await runClaude(payload.prompt, payload.model);
+            }
+
             return sendJson(res, 200, output);
         }
 

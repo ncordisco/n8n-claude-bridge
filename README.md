@@ -18,13 +18,23 @@ Guida completa: `docs/n8n-claude-code-bridge-guida.md`
 
 ## Tre modi di usare il bridge da n8n
 
-1. **HTTP Request diretto** — `workflows/n8n-esempio-agent-claude-http.json`
-2. **AI Agent nativo** (OpenAI Chat Model puntato al bridge) —
-   `workflows/n8n-esempio-ai-agent-nativo.json`. Dopo l'import, la credenziale va
-   ricreata a mano (vedi guida, sezione 6).
-3. **Nodo custom dedicato "Claude Code Bridge"** — vedi
-   `n8n-nodes-claude-code-bridge/README.md` per build e setup. UI più pulita, nessuna
-   credenziale fittizia da inventare.
+| #                                    | Workflow di esempio                                | Velocità                      | Reset sessione                |
+|--------------------------------------|----------------------------------------------------|-------------------------------|-------------------------------|
+| 1 — HTTP Request diretto             | `workflows/01-direct-http-call.json`               | Veloce (sessione persistente) | Sì, incluso nel flow          |
+| 2 — AI Agent nativo                  | `workflows/02-ai-agent-nativo.json`                | Lenta (stateless)             | Non serve                     |
+| 3 — Nodo custom "Claude Code Bridge" | `workflows/03-claude-code-bridge-custom-node.json` | Veloce (stessa sessione di 1) | Sì, Operation="Reset Session" |
+
+Dopo l'import di ciascun workflow, la credenziale va sempre ricreata a mano (l'ID nel
+JSON è un placeholder che non esiste nella tua istanza) — vedi guida, sezione 6 (Modalità
+B) e setup del nodo custom (Modalità 3).
+
+**Quando serve il reset e perché**: guida, sezione 8.5 — spiega il compromesso tra
+velocità (sessione persistente) e isolamento del contesto tra chiamate/workflow diversi.
+
+## Nodo custom dedicato "Claude Code Bridge"
+
+Vedi `n8n-nodes-claude-code-bridge/README.md` per build e setup. UI più pulita, nessuna
+credenziale fittizia da inventare, campo Operation per Run Prompt / Reset Session.
 
 ## Sviluppo del bridge (server.js)
 
@@ -36,6 +46,6 @@ rebuild necessario.
     n8n-compose/
     ├── docker-compose.yaml
     ├── claude-code/                       # il bridge HTTP verso claude CLI
-    ├── workflows/                         # esempi di workflow n8n
+    ├── workflows/                         # 01, 02, 03 - i tre esempi di workflow
     ├── n8n-nodes-claude-code-bridge/       # nodo custom n8n (opzionale)
     └── docs/                              # guida completa
